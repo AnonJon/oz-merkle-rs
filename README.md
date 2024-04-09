@@ -24,7 +24,7 @@ Add `oz_merkle_rs` to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-oz_merkle_rs = "0.1.0"
+oz_merkle_rs = "0.1.1"
 ```
 
 ## Basic Usage
@@ -57,7 +57,7 @@ let data = vec![
         U256::from_dec_str("7840233889215604334017").unwrap()),
     ];
         let tree = MerkleTree::new(data);
-        let node = MerkleTree::hash_node(0, data[0]);
+        let node = MerkleTree::hash_node(data[0]);
         let proof = tree.get_proof(node).unwrap();
         let result = tree.verify_proof(node, proof, tree.get_root().unwrap());
 ```
