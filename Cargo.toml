@@ -9,5 +9,5 @@ documentation = "https://docs.rs/oz_merkle_rs"
 
 
 [dependencies]
-ethers = { version = "2.0" }
 anyhow = "1.0"
+alloy-primitives = "0.7.0"

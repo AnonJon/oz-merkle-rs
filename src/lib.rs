@@ -1,9 +1,8 @@
-use ethers::core::utils::keccak256;
-use ethers::types::{Address, H256, U256};
+use alloy_primitives::{keccak256, Address, B256, U256};
 
 pub struct MerkleTree {
-    elements: Vec<H256>,
-    layers: Vec<Vec<H256>>,
+    elements: Vec<B256>,
+    layers: Vec<Vec<B256>>,
     leaves: usize,
 }
 
@@ -25,26 +24,22 @@ impl MerkleTree {
     ///
     /// ```rust
     /// use oz_merkle_rs::MerkleTree;
-    /// use ethers::types::{Address, U256};
+    /// use alloy_primitives::{Address, U256};
     /// use std::str::FromStr;
     ///
     /// // Create some sample data
     /// let data = vec![
     ///     (Address::from_str("0x1111111111111111111111111111111111111111").unwrap(),
-    ///         U256::from_dec_str("1840233889215604334017").unwrap()),
+    ///         U256::from_str("1840233889215604334017").unwrap()),
     ///     (Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
-    ///         U256::from_dec_str("7840233889215604334017").unwrap()),
+    ///         U256::from_str("7840233889215604334017").unwrap()),
     /// ];
     ///
     /// // Create a new Merkle tree from the data
     /// let merkle_tree = MerkleTree::new(data);
     ///
     pub fn new(data: Vec<(Address, U256)>) -> Self {
-        let mut elements: Vec<H256> = data
-            .iter()
-            .enumerate()
-            .map(|(index, x)| Self::hash_node(index, *x))
-            .collect();
+        let mut elements: Vec<B256> = data.iter().map(|x| Self::hash_node(*x)).collect();
         // sort and deduplicate to get the correct order of elements
         elements.sort();
         elements.dedup();
@@ -70,7 +65,7 @@ impl MerkleTree {
     ///
     /// An `Option` containing either the root hash if the Merkle tree is not empty,
     /// or `None` if the Merkle tree is empty.
-    pub fn get_root(&self) -> Option<H256> {
+    pub fn get_root(&self) -> Option<B256> {
         self.layers
             .last()
             .and_then(|last_layer| last_layer.first().cloned())
@@ -89,7 +84,7 @@ impl MerkleTree {
     ///
     /// An `Option` containing either the Merkle proof as a vector of hashes if the element is found,
     /// or `None` if the element is not present in the Merkle tree.
-    pub fn get_proof(&self, element: H256) -> Option<Vec<H256>> {
+    pub fn get_proof(&self, element: B256) -> Option<Vec<B256>> {
         let mut index = self.elements.iter().position(|&e| e == element)?;
         let mut proof = Vec::new();
 
@@ -118,7 +113,7 @@ impl MerkleTree {
     /// # Returns
     ///
     /// `true` if the proof is valid for the given element and root hash,
-    pub fn verify_proof(&self, element: H256, proof: Vec<H256>, root: H256) -> bool {
+    pub fn verify_proof(&self, element: B256, proof: Vec<B256>, root: B256) -> bool {
         let mut computed_hash = element;
 
         for proof_element in proof.into_iter() {
@@ -148,34 +143,28 @@ impl MerkleTree {
     ///
     /// This function takes the index and leaf data (address and amount) as input,
     /// concatenates them together, and computes the hash of the resulting byte array.
-    /// The hash is returned as a `H256` value.
+    /// The hash is returned as a `B256` value.
     ///
     /// # Arguments
     ///
-    /// * `index` - The index of the leaf node in the Merkle tree.
     /// * `leaf_data` - A tuple containing the address (`Address`) and amount (`U256`) of the leaf node.
     ///
     /// # Returns
     ///
-    /// A `H256` value representing the hash of the leaf node.
-    pub fn hash_node(index: usize, leaf_data: (Address, U256)) -> H256 {
+    /// A `B256` value representing the hash of the leaf node.
+    pub fn hash_node(leaf_data: (Address, U256)) -> B256 {
         let (account, amount) = leaf_data;
         let mut bytes = Vec::new();
 
-        let mut index_bytes = [0u8; 32];
-        U256::from(index).to_big_endian(&mut index_bytes);
-        bytes.extend_from_slice(&index_bytes);
+        bytes.extend_from_slice(account.as_slice());
 
-        bytes.extend_from_slice(account.as_bytes());
+        let index_amount: [u8; 32] = amount.to_be_bytes();
+        bytes.extend_from_slice(&index_amount);
 
-        let mut amount_bytes = [0u8; 32];
-        amount.to_big_endian(&mut amount_bytes);
-        bytes.extend_from_slice(&amount_bytes);
-
-        H256::from(keccak256(bytes))
+        keccak256(bytes)
     }
 
-    fn next_layer(elements: &[H256]) -> Vec<H256> {
+    fn next_layer(elements: &[B256]) -> Vec<B256> {
         elements
             .chunks(2)
             .map(|chunk| {
@@ -189,12 +178,12 @@ impl MerkleTree {
             .collect()
     }
 
-    fn hash_pair(a: &H256, b: &H256) -> H256 {
+    fn hash_pair(a: &B256, b: &B256) -> B256 {
         let mut pairs = [a, b];
         // Ensure lexicographical order
         pairs.sort();
-        let concatenated = [pairs[0].as_bytes(), pairs[1].as_bytes()].concat();
-        H256::from(keccak256(&concatenated))
+        let concatenated = [pairs[0], pairs[1]].concat();
+        keccak256(&concatenated)
     }
 }
 
@@ -208,11 +197,11 @@ mod test {
         let data = vec![
             (
                 Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
-                U256::from_dec_str("1840233889215604334017").unwrap(),
+                U256::from_str("1840233889215604334017").unwrap(),
             ),
             (
                 Address::from_str("0x008EF27b8d0B9f8c1FAdcb624ef5FebE4f11fa9f").unwrap(),
-                U256::from_dec_str("73750290420694562195").unwrap(),
+                U256::from_str("73750290420694562195").unwrap(),
             ),
         ];
         MerkleTree::new(data)
@@ -231,7 +220,7 @@ mod test {
     fn merkle_tree_root_hash_correctness() {
         let tree = setup_tree();
         let expected_root_hash =
-            "0x1b999c65d923a6c4e70c9a4419c9f7d2a303d4599c165fbd9fbca60d457211c6";
+            "0x54f23346bacf6e33c89e27917b92354a0b89c670bc67918bd17debf369bbd3fa";
 
         assert_eq!(
             format!("{:?}", tree.get_root().unwrap()),
@@ -244,10 +233,10 @@ mod test {
     fn get_proof_for_valid_index() {
         let data = (
             Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
-            U256::from_dec_str("1840233889215604334017").unwrap(),
+            U256::from_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let proof = tree.get_proof(MerkleTree::hash_node(0, data)).unwrap();
+        let proof = tree.get_proof(MerkleTree::hash_node(data)).unwrap();
 
         assert!(
             !proof.is_empty(),
@@ -259,10 +248,10 @@ mod test {
     fn get_proof_for_invalid_index() {
         let data = (
             Address::from_str("0x1111111111111111111111111111111111111111").unwrap(),
-            U256::from_dec_str("1840233889215604334017").unwrap(),
+            U256::from_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let proof_result = tree.get_proof(MerkleTree::hash_node(0, data));
+        let proof_result = tree.get_proof(MerkleTree::hash_node(data));
 
         assert!(
             proof_result.is_none(),
@@ -274,10 +263,10 @@ mod test {
     fn verify_valid_proof() {
         let data = (
             Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
-            U256::from_dec_str("1840233889215604334017").unwrap(),
+            U256::from_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let node = MerkleTree::hash_node(0, data);
+        let node = MerkleTree::hash_node(data);
         let proof = tree.get_proof(node).unwrap();
         let result = tree.verify_proof(node, proof, tree.get_root().unwrap());
 
