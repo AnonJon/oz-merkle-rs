@@ -1,3 +1,4 @@
+use ethers::abi::ethabi;
 use ethers::core::utils::keccak256;
 use ethers::types::{Address, H256, U256};
 
@@ -147,15 +148,23 @@ impl MerkleTree {
     /// A `H256` value representing the hash of the leaf node.
     pub fn hash_node(leaf_data: (Address, U256)) -> H256 {
         let (account, amount) = leaf_data;
-        let mut bytes = Vec::new();
 
-        bytes.extend_from_slice(account.as_bytes());
+        let mut account_bytes = [0u8; 20];
+        account_bytes.copy_from_slice(account.as_bytes());
 
         let mut amount_bytes = [0u8; 32];
         amount.to_big_endian(&mut amount_bytes);
-        bytes.extend_from_slice(&amount_bytes);
 
-        H256::from(keccak256(bytes))
+        let encoded_data =
+            ethabi::encode(&[ethabi::Token::Address(account), ethabi::Token::Uint(amount)]);
+
+        let hashed_data = keccak256(encoded_data);
+
+        let mut concatenated_data = Vec::new();
+        concatenated_data.extend_from_slice(&hashed_data);
+
+        let final_hash = keccak256(concatenated_data);
+        H256::from(final_hash)
     }
 
     fn next_layer(elements: &[H256]) -> Vec<H256> {
@@ -210,7 +219,7 @@ mod test {
     fn merkle_tree_root_hash_correctness() {
         let tree = setup_tree();
         let expected_root_hash =
-            "0x54f23346bacf6e33c89e27917b92354a0b89c670bc67918bd17debf369bbd3fa";
+            "0xf699ff5e6437c56f56f6bb1b95c2cf7701b50c9ac75398e7f07ea151e4fee846";
 
         assert_eq!(
             format!("{:?}", tree.get_root().unwrap()),
@@ -248,6 +257,23 @@ mod test {
     }
     #[test]
     fn verify_valid_proof() {
+        let data = (
+            Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
+            U256::from_dec_str("1840233889215604334017").unwrap(),
+        );
+        let tree = setup_tree();
+        let node = MerkleTree::hash_node(data);
+        let proof = tree.get_proof(node).unwrap();
+        let result = tree.verify_proof(node, proof, tree.get_root().unwrap());
+
+        assert!(
+            result,
+            "Proof should be valid and verification should succeed"
+        );
+    }
+
+    #[test]
+    fn verify_valid_proof2() {
         let data = (
             Address::from_str("0x00393d62f17b07e64f7cdcdf9bdc2fd925b20bba").unwrap(),
             U256::from_dec_str("1840233889215604334017").unwrap(),
